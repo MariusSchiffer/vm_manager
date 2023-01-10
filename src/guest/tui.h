@@ -31,6 +31,7 @@ int create_tui(void);
 
 typedef struct {
     std::string name;
+    std::vector<std::string> elements;
     bool checked;
 } CheckBoxState;
 
@@ -66,7 +67,7 @@ namespace vm_manager {
 
 class CivTui final {
  public:
-    void InitializeUi(std::string filename);
+    void InitializeUi(std::string filename, bool setup = false);
 
  private:
     std::string filename_;
@@ -165,6 +166,7 @@ class CivTui final {
     std::function<void(void)> SaveOn;
 
     void InitializeForm(void);
+    void InitializeSetupForm(void);
     void InitializeButtons(void);
     void SetConfToPtree();
 };

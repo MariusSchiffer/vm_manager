@@ -202,6 +202,7 @@ class CivOptions final {
         cmdline_options_.add_options()
             ("help,h",    "Show this help message")
             ("create,c",  po::value<std::string>(), "Create a CiV guest")
+            ("setup",  po::value<std::string>(), "Setup a CiV guest")
             ("delete,d",  po::value<std::string>(), "Delete a CiV guest")
             ("start,b",   po::value<std::string>(), "Start a CiV guest")
             ("stop,q",    po::value<std::string>(), "Stop a CiV guest")
@@ -268,6 +269,12 @@ class CivOptions final {
         if (vm_.count("create")) {
             CivTui ct;
             ct.InitializeUi(vm_["create"].as<std::string>());
+            return true;
+        }
+
+        if (vm_.count("setup")) {
+            CivTui ct;
+            ct.InitializeUi(vm_["setup"].as<std::string>());
             return true;
         }
 

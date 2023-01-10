@@ -95,19 +95,42 @@ void CivTui::InitCompRpmb(void) {
 }
 
 void CivTui::InitCompPciPt(void) {
-    boost::process::ipstream pipe_stream;
-    std::error_code ec;
-    boost::process::child c("lspci -D", boost::process::std_out > pipe_stream);
-    std::string line;
-    while (pipe_stream && std::getline(pipe_stream, line)) {
-        if (!line.empty()) {
-            CheckBoxState item = { line, false };
-            pci_dev_.push_back(item);
-        }
-        line.erase();
+    // Initialize from config
+    
+    std::string passthrough = civ_config_.GetValue(kGroupPciPt, kPciPtDev);
+    std::vector<std::string> loaded_pt;
+    if (!passthrough.empty()) {
+        boost::split(loaded_pt, pt_pci, boost::is_any_of(","), boost::token_compress_on);
     }
 
-    c.wait(ec);
+    for(auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator("/home/schiffer/iommu_test"), {})) {
+        auto devs = entry.path();
+        devs /= "/devices";
+        std::cout << devs << std::endl;
+        CheckBoxState item;
+        item.name = "IOMMU group: "+entry.path().filename().string();
+        item.checked = false;
+        for(auto& entry2 : boost::make_iterator_range(boost::filesystem::directory_iterator(devs), {})) {
+            std::string entry_pci_dev = entry2.path().filename().string();
+            if (std::find(loaded_pt.begin(), loaded_pt.end(), entry_pci_dev) {
+                item.checked = true;
+            }                    
+            boost::process::ipstream pipe_stream;
+            boost::process::child c("lspci -D -s "+entry_pci_dev, boost::process::std_out > pipe_stream);
+            std::error_code ec;
+            std::string line;
+            while (pipe_stream && std::getline(pipe_stream, line)) {
+                if (!line.empty()) {
+                    item.elements.push_back(line);
+                }
+                line.erase();
+            }
+            c.wait(ec);
+        }
+        pci_dev_.push_back(item);
+    }
+
+
 
     PtPciClickButton = [&]() {
         pt_pci_disp_.clear();
@@ -130,6 +153,10 @@ void CivTui::InitCompPciPt(void) {
     cpt_inner_right_edit_ = ftxui::Container::Vertical({});
     for (std::vector<CheckBoxState>::iterator t = pci_dev_.begin(); t != pci_dev_.end(); ++t) {
         cpt_inner_right_edit_->Add(ftxui::Checkbox(t->name, &t->checked));
+        for (auto it = t->elements.begin(); it != t->elements.end(); ++it) {
+            auto name = *it;
+            cpt_inner_right_edit_->Add(ftxui::Renderer([name]{ return ftxui::text(name); }));
+        }
     }
     cpt_inner_right_disp_ = ftxui::Menu(&pt_pci_disp_, &pt_pci_menu_selected_);
 
@@ -138,12 +165,12 @@ void CivTui::InitCompPciPt(void) {
         return ftxui::hbox(
             ftxui::vbox(
                 cpt_inner_left_btn_->Render() | ftxui::center,
-                ftxui::text(std::to_string(pt_pci_disp_.size()) + " Slected") | ftxui::center),
+                ftxui::text(std::to_string(pt_pci_disp_.size()) + " Selected") | ftxui::center),
             cpt_inner_right_->Render() | ftxui::frame | ftxui::vscroll_indicator);
     });
     cpt_ = ftxui::Renderer(cpt_inner_, [&]{
         return ftxui::window(ftxui::text("PCI Devices to Passthrough"), cpt_inner_->Render())
-             | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 6);
+             | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 16);
     });
 }
 
@@ -184,6 +211,21 @@ void CivTui::InitializeForm(void) {
     });
 }
 
+void CivTui::InitializeSetupForm(void) {
+    InitName(filename_);
+    InitCompPciPt();
+
+    form_ = ftxui::Container::Vertical({
+        name_,
+        cpt_,
+    });
+
+    form_render_ = ftxui::Renderer(form_, [&]{
+        ftxui::Element eform_ = ftxui::vbox(form_->Render()) | ftxui::frame | ftxui::vscroll_indicator;
+        return eform_;
+    });
+}
+
 void CivTui::InitializeButtons(void) {
     SaveOn = [&]() {
         std::string configPath = GetConfigPath();
@@ -200,7 +242,7 @@ void CivTui::InitializeButtons(void) {
             }
             file.close();
         } else {
-            status_bar_ = "File alreay exist!";
+
         }
         screen_.Clear();
     };
@@ -213,9 +255,15 @@ void CivTui::InitializeButtons(void) {
     });
 }
 
-void CivTui::InitializeUi(std::string name) {
+void CivTui::InitializeUi(std::string name, bool setup) {
     filename_ = name;
-    InitializeForm();
+    
+    if (setup) {
+      civ_config_.ReadConfigFile(GetConfigPath() + "/" + name + ".ini"); 
+      InitializeSetupForm();
+    } else {
+      InitializeForm();
+    }
     InitializeButtons();
 
     layout_ = ftxui::Container::Vertical({
@@ -234,6 +282,20 @@ void CivTui::InitializeUi(std::string name) {
     });
 
     screen_.Loop(layout_render);
+}
+
+void CivTui::SetPtConfToPtree() {
+    std::string passthrough;
+    for (std::vector<std::string>::iterator iter = pt_pci_disp_.begin(); iter!=pt_pci_disp_.end(); iter++) {
+        std::string selectItem = *iter;
+        size_t pos = selectItem.find(" ");
+        passthrough += selectItem.substr(0, pos);
+        if (iter!=pt_pci_disp_.end()-1) {
+            passthrough += ',';
+        }
+    }
+    civ_config_.SetValue(kGroupPciPt, kPciPtDev, passthrough);
+
 }
 
 void CivTui::SetConfToPtree() {
@@ -271,17 +333,7 @@ void CivTui::SetConfToPtree() {
     civ_config_.SetValue(kGroupRpmb, kVtpmBinPath, rpmb_bin_.GetContent());
     civ_config_.SetValue(kGroupRpmb, kVtpmDataDir, rpmb_data_.GetContent());
 
-    std::string passthrough;
-    for (std::vector<std::string>::iterator iter = pt_pci_disp_.begin(); iter!=pt_pci_disp_.end(); iter++) {
-        std::string selectItem = *iter;
-        size_t pos = selectItem.find(" ");
-        passthrough += selectItem.substr(0, pos);
-        if (iter!=pt_pci_disp_.end()-1) {
-            passthrough += ',';
-        }
-    }
 
-    civ_config_.SetValue(kGroupPciPt, kPciPtDev, passthrough);
 
     civ_config_.SetValue(kGroupNet, kNetAdbPort, adb_port_.GetContent());
 
