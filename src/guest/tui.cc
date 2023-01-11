@@ -100,10 +100,10 @@ void CivTui::InitCompPciPt(void) {
     std::string passthrough = civ_config_.GetValue(kGroupPciPt, kPciPtDev);
     std::vector<std::string> loaded_pt;
     if (!passthrough.empty()) {
-        boost::split(loaded_pt, pt_pci, boost::is_any_of(","), boost::token_compress_on);
+        boost::split(loaded_pt, passthrough, boost::is_any_of(","), boost::token_compress_on);
     }
 
-    for(auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator("/home/schiffer/iommu_test"), {})) {
+    for(auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator("/sys/kernel/iommu_groups"), {})) {
         auto devs = entry.path();
         devs /= "/devices";
         std::cout << devs << std::endl;
@@ -112,7 +112,7 @@ void CivTui::InitCompPciPt(void) {
         item.checked = false;
         for(auto& entry2 : boost::make_iterator_range(boost::filesystem::directory_iterator(devs), {})) {
             std::string entry_pci_dev = entry2.path().filename().string();
-            if (std::find(loaded_pt.begin(), loaded_pt.end(), entry_pci_dev) {
+            if (std::find(loaded_pt.begin(), loaded_pt.end(), entry_pci_dev) != loaded_pt.end()) {
                 item.checked = true;
             }                    
             boost::process::ipstream pipe_stream;
@@ -122,6 +122,8 @@ void CivTui::InitCompPciPt(void) {
             while (pipe_stream && std::getline(pipe_stream, line)) {
                 if (!line.empty()) {
                     item.elements.push_back(line);
+                    if (item.checked)
+                        pt_pci_disp_.push_back(line);
                 }
                 line.erase();
             }
@@ -130,13 +132,11 @@ void CivTui::InitCompPciPt(void) {
         pci_dev_.push_back(item);
     }
 
-
-
     PtPciClickButton = [&]() {
         pt_pci_disp_.clear();
-        for (std::vector<CheckBoxState>::iterator it = pci_dev_.begin(); it != pci_dev_.end(); ++it) {
+        for (auto it = pci_dev_.begin(); it != pci_dev_.end(); ++it) {
             if (it->checked) {
-                pt_pci_disp_.push_back(it->name);
+                pt_pci_disp_.insert(pt_pci_disp_.end(), it->elements.begin(), it->elements.end());
             }
         }
         pt_pci_tab_id_ = !pt_pci_tab_id_;
@@ -153,9 +153,8 @@ void CivTui::InitCompPciPt(void) {
     cpt_inner_right_edit_ = ftxui::Container::Vertical({});
     for (std::vector<CheckBoxState>::iterator t = pci_dev_.begin(); t != pci_dev_.end(); ++t) {
         cpt_inner_right_edit_->Add(ftxui::Checkbox(t->name, &t->checked));
-        for (auto it = t->elements.begin(); it != t->elements.end(); ++it) {
-            auto name = *it;
-            cpt_inner_right_edit_->Add(ftxui::Renderer([name]{ return ftxui::text(name); }));
+        for (const auto& it: t->elements) {
+            cpt_inner_right_edit_->Add(ftxui::Renderer([&]{ return ftxui::text(it); }));
         }
     }
     cpt_inner_right_disp_ = ftxui::Menu(&pt_pci_disp_, &pt_pci_menu_selected_);
@@ -230,20 +229,21 @@ void CivTui::InitializeButtons(void) {
     SaveOn = [&]() {
         std::string configPath = GetConfigPath();
         std::string filePath = configPath + "/" + filename_ +".ini";
-        if (!boost::filesystem::exists(filePath)) {
-            boost::filesystem::ofstream file(filePath) ;
+        bool fileExists = boost::filesystem::exists(filePath);
+        boost::filesystem::ofstream file(filePath);
+        if (!fileExists) {
             SetConfToPtree();
-            bool writeConfigFile = civ_config_.WriteConfigFile(filePath);
-            if (writeConfigFile) {
-                screen_.ExitLoopClosure()();
-                LOG(info) << "Config saved!" << std::endl;
-            } else {
-                LOG(warning) << "Write config file failue!" << std::endl;
-            }
-            file.close();
         } else {
-
+            SetPciPtConfToPtree();
         }
+        bool writeConfigFile = civ_config_.WriteConfigFile(filePath);
+        if (writeConfigFile) {
+            screen_.ExitLoopClosure()();
+            LOG(info) << "Config saved!" << std::endl;
+        } else {
+            LOG(warning) << "Write config file failue!" << std::endl;
+        }
+        file.close();
         screen_.Clear();
     };
 
@@ -259,7 +259,7 @@ void CivTui::InitializeUi(std::string name, bool setup) {
     filename_ = name;
     
     if (setup) {
-      civ_config_.ReadConfigFile(GetConfigPath() + "/" + name + ".ini"); 
+      civ_config_.ReadConfigFile(std::string(GetConfigPath()) + "/" + name + ".ini");
       InitializeSetupForm();
     } else {
       InitializeForm();
@@ -284,7 +284,7 @@ void CivTui::InitializeUi(std::string name, bool setup) {
     screen_.Loop(layout_render);
 }
 
-void CivTui::SetPtConfToPtree() {
+void CivTui::SetPciPtConfToPtree() {
     std::string passthrough;
     for (std::vector<std::string>::iterator iter = pt_pci_disp_.begin(); iter!=pt_pci_disp_.end(); iter++) {
         std::string selectItem = *iter;
@@ -333,7 +333,7 @@ void CivTui::SetConfToPtree() {
     civ_config_.SetValue(kGroupRpmb, kVtpmBinPath, rpmb_bin_.GetContent());
     civ_config_.SetValue(kGroupRpmb, kVtpmDataDir, rpmb_data_.GetContent());
 
-
+    SetPciPtConfToPtree();
 
     civ_config_.SetValue(kGroupNet, kNetAdbPort, adb_port_.GetContent());
 

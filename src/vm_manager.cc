@@ -274,7 +274,7 @@ class CivOptions final {
 
         if (vm_.count("setup")) {
             CivTui ct;
-            ct.InitializeUi(vm_["setup"].as<std::string>());
+            ct.InitializeUi(vm_["setup"].as<std::string>(), true);
             return true;
         }
 

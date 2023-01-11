@@ -168,6 +168,7 @@ class CivTui final {
     void InitializeForm(void);
     void InitializeSetupForm(void);
     void InitializeButtons(void);
+    void SetPciPtConfToPtree();
     void SetConfToPtree();
 };
 
