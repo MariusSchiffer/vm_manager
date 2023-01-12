@@ -43,7 +43,8 @@ class InputField {
         wrap_ = ftxui::Renderer(input_, RenderInput);
      }
 
-     ftxui::Component Get() {
+     ftxui::Component Get(std::string content = "") {
+         content_ = content;
          return wrap_;
      }
      

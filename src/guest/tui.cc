@@ -172,7 +172,7 @@ void CivTui::InitCompPciPt(void) {
     });
     cpt_ = ftxui::Renderer(cpt_inner_, [&]{
         return ftxui::window(ftxui::text("PCI Devices to Passthrough"), cpt_inner_->Render())
-             | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 16);
+             | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 40);
     });
 }
 
@@ -219,6 +219,8 @@ void CivTui::InitializeSetupForm(void) {
 
     form_ = ftxui::Container::Vertical({
         name_,
+        memory_.Get(civ_config_.GetValue(kGroupMem, kMemSize)),
+        vcpu_.Get(civ_config_.GetValue(kGroupVcpu, kVcpuNum)),
         cpt_,
     });
 
@@ -238,6 +240,9 @@ void CivTui::InitializeButtons(void) {
             SetConfToPtree();
         } else {
             SetPciPtConfToPtree();
+            civ_config_.SetValue(kGroupMem, kMemSize, memory_.GetContent());
+
+            civ_config_.SetValue(kGroupVcpu, kVcpuNum, vcpu_.GetContent());
         }
         bool writeConfigFile = civ_config_.WriteConfigFile(filePath);
         if (writeConfigFile) {
@@ -281,7 +286,7 @@ void CivTui::InitializeUi(std::string name, bool setup) {
             ftxui::text(status_bar_),
             buttons_->Render() | ftxui::center,
         }) | ftxui::border | ftxui::size(ftxui::WIDTH, ftxui::GREATER_THAN, LAYOUT_MIN_WIDTH)
-           | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 80) | ftxui::center;
+           | ftxui::size(ftxui::HEIGHT, ftxui::LESS_THAN, 120) | ftxui::center;
     });
 
     screen_.Loop(layout_render);
