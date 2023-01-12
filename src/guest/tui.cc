@@ -121,6 +121,9 @@ void CivTui::InitCompPciPt(void) {
             std::string line;
             while (pipe_stream && std::getline(pipe_stream, line)) {
                 if (!line.empty()) {
+                    // Skip PCI bridges
+                    if (line.find("PCI bridge") != std::string::npos)
+                        break;
                     item.elements.push_back(line);
                     if (item.checked)
                         pt_pci_disp_.push_back(line);
